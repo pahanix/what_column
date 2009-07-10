@@ -27,38 +27,46 @@ module WhatColumn
     end
 
     private
+
+    def rewrite_file(file)
+      file.rewind            
+      output_lines = []
+      
+      file.readlines.each_with_index do |line, index|
+        yield output_lines, line, index
+      end
+      
+      file.pos = 0
+      file.print output_lines
+      file.truncate(file.pos)
+    end
+
+    def model_columns_details(ar_class)
+      max_width = ar_class.columns.map {|c| c.name.length + 1}.max
+      # the format string is used to line up the column types correctly
+      format_string = "#{INCREMENT}#   %-#{max_width}s: %s \n"
+
+      ["\n" + INCREMENT + HEADER + "\n"] + 
+      ar_class.columns.map do |column|
+        format_string % [column.name, column.type.to_s]
+      end + 
+      [INCREMENT + FOOTER + "\n\n"]
+    end
+
+    
     def add_column_details_to_file(filepath)
       File.open(filepath, "r+") do |file|
-        if file.read.match(/class (.*)\</)
-          ar_class = $1.strip.constantize
+        source_code = file.read
 
-          if class_can_be_columnized?(ar_class)
+        ar_class = source_code.match(/^\s*class (.*?)\s*\</) && $1.constantize
+        return unless ar_class
+        return unless class_can_be_columnized?(ar_class)
 
-            max_width = ar_class.columns.map {|c| c.name.length + 1}.max
-            # the format string is used to line up the column types correctly
-            format_string = "#{INCREMENT}#   %-#{max_width}s: %s \n"
-
-            file.rewind            
-            read_lines = file.readlines
-            output_lines = []
-            # find the lines that start with the appropriate class
-            read_lines.each do |line|
-              output_lines << line
-              if line.match(/class (.*)\</) and $1.strip.constantize == ar_class
-                output_lines << "\n" + INCREMENT + HEADER + "\n"
-                ar_class.columns.each do |column|
-                  values = [column.name, column.type.to_s]
-                  output_lines << format_string % values
-                end
-                output_lines << INCREMENT + FOOTER + "\n\n"
-
-              end
-            end
-
-            file.pos = 0
-            file.print output_lines
-            file.truncate(file.pos)
-
+        rewrite_file(file) do |output_lines, line, index|          
+          output_lines << line
+          if line.match(/^\s*class (#{ar_class})\s*\</)
+            output_lines << model_columns_details(ar_class)
+            output_lines.flatten!
           end
         end
       end
