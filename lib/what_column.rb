@@ -5,6 +5,10 @@ module WhatColumn
     FOOTER = "# ======================="
     INCREMENT = "  "
     
+    LIST_OF_COLUMNS_REGEXP  = /\n\s*#{HEADER}\s*.*?\s*#{FOOTER}\s*\n/m
+    CLASS_DEFINITION_REGEXP = /\n?\s*class (.*?)\s*\<.*?(?:\n|;)/m
+                            #        class (User)   < ActiveRecord::Base
+    
     def add_column_details_to_models
       remove_column_details_from_models    
       with_each_file_in_rails_directory('app', 'models') do |file|
@@ -23,9 +27,9 @@ module WhatColumn
 
     def add_column_details_to_file(filepath)
       rewrite_file(filepath) do |source|
-        source.gsub(/(\n?\s*class (.*?)\s*\<.*?(?:\n|;))(\n*?)/m) do
-          ar_class = $2.constantize rescue nil
-          [$1, model_columns_details(ar_class), $4].join
+        source.gsub(CLASS_DEFINITION_REGEXP) do |definition|
+          ar_class = $1.constantize rescue nil
+          [definition, model_columns_details(ar_class)].join
         end
       end
     end
@@ -33,7 +37,7 @@ module WhatColumn
 
     def remove_column_details_from_file(filepath)
       rewrite_file(filepath) do |source|
-        source.gsub(/\n\s*#{HEADER}\s*.*?\s*#{FOOTER}\s*\n/m, "\n")
+        source.gsub(LIST_OF_COLUMNS_REGEXP, "\n")
       end
     end
 
