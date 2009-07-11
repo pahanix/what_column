@@ -11,15 +11,15 @@ module WhatColumn
     
     def add_column_details_to_models
       remove_column_details_from_models    
-      with_each_file_in_rails_directory('app', 'models') do |file|
-        add_column_details_to_file(file)
+      for_each_file_in_rails_directory('app', 'models') do |filepath|
+        add_column_details_to_file(filepath)
       end
     end
     
 
     def remove_column_details_from_models
-      with_each_file_in_rails_directory('app', 'models') do |file|
-        remove_column_details_from_file(file)
+      for_each_file_in_rails_directory('app', 'models') do |filepath|
+        remove_column_details_from_file(filepath)
       end
     end
     
@@ -27,9 +27,13 @@ module WhatColumn
 
     def add_column_details_to_file(filepath)
       rewrite_file(filepath) do |source|
-        source.gsub(CLASS_DEFINITION_REGEXP) do |definition|
-          ar_class = $1.constantize rescue nil
-          [definition, model_columns_details(ar_class)].join
+        source.gsub(CLASS_DEFINITION_REGEXP) do |class_definition|
+          begin
+            active_record_class = $1.constantize
+            class_definition << model_columns_details(active_record_class)
+          rescue NameError # uninitialized constant +active_record_class+
+            class_definition
+          end
         end
       end
     end
@@ -42,7 +46,7 @@ module WhatColumn
     end
 
 
-    def with_each_file_in_rails_directory(*args)
+    def for_each_file_in_rails_directory(*args)
       dirs = [RAILS_ROOT] + args + ['**', '*']
       Dir[File.join(*dirs)].each do |file|
         next if File.directory?(file)
@@ -58,7 +62,8 @@ module WhatColumn
 
 
     def model_columns_details(ar_class)
-      return unless class_can_be_columnized?(ar_class)
+      # empty for abstract class
+      return "" unless class_can_be_columnized?(ar_class)
       
       max_width = ar_class.columns.map {|c| c.name.length + 1}.max
       # the format string is used to line up the column types correctly
